@@ -40,6 +40,7 @@ Optional tools (for automation and testing):
 | Appium 2.x | XCUITest/UiAutomator2-based UI automation |
 | Node.js 18+ | Required by Appium |
 | MAUI Sherpa | Desktop GUI to manage Android SDKs, Apple certificates/profiles, emulators, keystores & device inspectors (see `docs/maui-sherpa.md`) |
+| MAUI Skills (Claude Code / Copilot plugin) | ~37 on-demand .NET MAUI & Xamarin-migration skills for AI coding agents — reference catalog in `docs/maui-skills.md`, install/usage in `docs/maui-skills-usage.md` |
 
 ## Architecture Rules
 

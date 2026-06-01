@@ -114,6 +114,14 @@ ls -d "/Applications/MAUI Sherpa.app" "$HOME/Applications/MAUI Sherpa.app" 2>/de
 - PASS if an app bundle or brew cask is found
 - INFO if not found — optional dev-machine tool for managing Android SDKs, Apple certs/profiles, emulators, keystores & device inspectors (see `docs/maui-sherpa.md`). Install via: `brew install --cask redth/tap/maui-sherpa` (macOS) or download from the GitHub releases page.
 
+### MAUI Skills plugin  *(optional)*
+AI-agent skill pack — not a CLI on PATH; it installs as a Claude Code / Copilot CLI plugin. Detect via the Claude Code plugin registry or cached marketplace clone:
+```bash
+grep -l "maui-skills" ~/.claude/plugins/installed_plugins.json ~/.claude/plugins/known_marketplaces.json 2>/dev/null || find ~/.claude/plugins/cache -maxdepth 2 -name maui-skills 2>/dev/null | grep . || echo "NOT FOUND"
+```
+- PASS if the plugin or its marketplace is found
+- INFO if not found — optional reference resource: ~37 on-demand .NET MAUI / Xamarin-migration skills for AI coding agents (see `docs/maui-skills.md`). Install via: `/plugin marketplace add davidortinau/maui-skills` then `/plugin install maui-skills@maui-skills` (full steps in `docs/maui-skills-usage.md`). Detection only covers Claude Code; on Copilot CLI verify with `/skills`.
+
 ---
 
 ## Section 2 — Project Configuration
@@ -247,6 +255,7 @@ ENVIRONMENT & TOOLS
 ℹ️  MAUI DevFlow CLI      not installed  (optional — see docs/appium-vs-maui-devflow.md)
 ℹ️  Appium               not installed  (optional)
 ℹ️  MAUI Sherpa          not installed  (optional — see docs/maui-sherpa.md)
+ℹ️  MAUI Skills plugin    not installed  (optional — see docs/maui-skills.md)
 
 PROJECT CONFIGURATION
 ──────────────────────────────────────────────────

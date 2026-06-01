@@ -12,6 +12,14 @@ Best practices, tools, and research for .NET MAUI development.
 - [MAUI Sherpa — How to Use & Best Practices](maui-sherpa.md)  
   Cross-platform desktop app that manages Android SDKs, Apple certificates/profiles, emulators/simulators, keystores, device inspectors, and a DevFlow app inspector. Optional dev-machine convenience tool; complements `/nomad-maui-doctor`.
 
+## AI Agent Skills
+
+- [MAUI Skills — Reference Catalog](maui-skills.md)  
+  Reference for `davidortinau/maui-skills`: what the ~37 on-demand .NET MAUI / Xamarin-migration skills are, the full skill catalog, how they map to NOMAD.Maui conventions, and how they relate to the official `dotnet/skills` repo.
+
+- [MAUI Skills — How to Install & Use](maui-skills-usage.md)  
+  Install/usage guide for the skills plugin in Claude Code and GitHub Copilot CLI — marketplace commands, the on-demand invocation model, prompting tips, updating/removing, and when to use them vs. project docs.
+
 ## UI Automation & Testing
 
 - [MAUI DevFlow — How to Use & Best Practices](maui-devflow.md)  
