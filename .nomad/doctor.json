@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "initializedAt": "2026-06-02",
+  "platforms": ["ios", "android"],
+  "uiAutomation": "devflow",
+  "optionalTools": ["maui-skills"]
+}
