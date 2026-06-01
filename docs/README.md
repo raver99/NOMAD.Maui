@@ -10,7 +10,7 @@ Best practices, tools, and research for .NET MAUI development.
 ## Environment & Tooling
 
 - [MAUI Sherpa — How to Use & Best Practices](maui-sherpa.md)  
-  Cross-platform desktop app that manages Android SDKs, Apple certificates/profiles, emulators/simulators, keystores, device inspectors, and a DevFlow app inspector. Optional dev-machine convenience tool; complements `/nomad-doctor`.
+  Cross-platform desktop app that manages Android SDKs, Apple certificates/profiles, emulators/simulators, keystores, device inspectors, and a DevFlow app inspector. Optional dev-machine convenience tool; complements `/nomad-maui-doctor`.
 
 ## UI Automation & Testing
 
