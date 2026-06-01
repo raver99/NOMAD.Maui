@@ -2,6 +2,11 @@
 
 Best practices, tools, and research for .NET MAUI development.
 
+## Conventions
+
+- [.NET MAUI Conventions & Best Practices](maui-conventions.md)  
+  The conventions the NOMAD sample app follows — MVVM, DI, mandatory AutomationId, DevFlow agent registration, screen boilerplate, and app-identity rules. Enforced by `/nomad-maui-doctor`.
+
 ## UI Components
 
 - [UI Components Library — Recommended Controls](ui-components.md)  
