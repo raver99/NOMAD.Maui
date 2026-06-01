@@ -111,3 +111,18 @@ When you add an **optional or conditional** tool (one that only some configurati
 2. Tag the new check **[profile]** and define its skip / escalation behavior against that profile value.
 
 The goal: running `/nomad-maui-skills:nomad-maui-doctor` on a fresh clone should surface every missing setup step and every deviation from project conventions — tailored to how *this* project is configured — without requiring prior knowledge of this repo.
+
+---
+
+## Plugin Versioning
+
+This repo ships a Claude Code plugin. Its payload is everything under **`plugins/nomad-maui-skills/`** (skills, scripts), and its version lives in **`.claude-plugin/marketplace.json`**.
+
+**Whenever you change anything under `plugins/nomad-maui-skills/`, bump the plugin `version` in `.claude-plugin/marketplace.json` in the same change.** Claude Code uses that version to detect updates — without a bump, installed users won't be offered your changes.
+
+Use semver:
+- **patch** (`x.y.Z`) — fixes/wording in a skill, no behavior change for users
+- **minor** (`x.Y.0`) — new skill, new check, new feature (backward-compatible)
+- **major** (`X.0.0`) — breaking change (renamed/removed skill, changed invocation or arguments)
+
+Changes outside `plugins/` (e.g. `docs/`, this `CLAUDE.md`) are **not** part of the plugin payload and do **not** require a version bump.
