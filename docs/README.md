@@ -20,6 +20,9 @@ Best practices, tools, and research for .NET MAUI development.
 - [MAUI Skills — How to Install & Use](maui-skills-usage.md)  
   Install/usage guide for the skills plugin in Claude Code and GitHub Copilot CLI — marketplace commands, the on-demand invocation model, prompting tips, updating/removing, and when to use them vs. project docs.
 
+- [Syncfusion MAUI Skills — How to Install & Use](syncfusion-maui-skills.md)  
+  Per-control AI-agent skills for Syncfusion MAUI components via the `npx skills` CLI. Relevant only when the project references `Syncfusion.Maui.*` packages — `/nomad-maui-doctor` auto-detects this and expects the skills installed.
+
 ## UI Automation & Testing
 
 - [MAUI DevFlow — How to Use & Best Practices](maui-devflow.md)  

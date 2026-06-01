@@ -5,13 +5,68 @@ description: Check .NET MAUI project health — environment tools, workloads, pr
 
 Run a comprehensive health check on the .NET MAUI project. Produce a formatted report with PASS / WARN / FAIL / INFO for each item.
 
-**Argument:** $ARGUMENTS — optional filter: `env` (environment/tools only), `project` (project config + architecture only), or omit for all checks.
+**Argument:** $ARGUMENTS — optional:
+- `init` — force re-initialization (re-ask the project profile questions, even if a profile already exists).
+- `env` — environment/tools checks only.
+- `project` — project config + architecture checks only.
+- omit — run initialization if needed, then all checks.
 
 ---
 
 ## How to run
 
-Work through each section below in order. For every check, run the indicated bash command, evaluate the result against the criteria, and record the status. After all checks, print the full report.
+1. **Run Step 0 first** to load (or create) the project profile.
+2. Then work through each section in order. For every check, run the indicated bash command, evaluate the result against the criteria, and record the status. Checks tagged **[profile]** change behavior or are skipped based on the profile.
+3. After all checks, print the full report.
+
+---
+
+## Step 0 — Project profile (run first)
+
+The doctor adapts to how *this* project is actually set up, using a profile stored at `.nomad/doctor.json` (committed to git, so the whole team shares one check policy).
+
+Load it and decide whether to initialize:
+```bash
+cat .nomad/doctor.json 2>/dev/null || echo "NO PROFILE"
+```
+
+Enter **Initialization Mode** if the file is missing/unparseable **OR** `$ARGUMENTS` contains `init`. Otherwise, parse the JSON and continue to Section 1.
+
+### Initialization Mode
+
+Ask the user the following with the **AskUserQuestion** tool. When re-initializing (`init`), pre-fill the current profile values as the defaults so the user only changes what's needed.
+
+1. **Target platforms** *(multi-select)* — `iOS`, `Android`. Gates the iOS toolchain checks (Xcode, simulators) and the Android toolchain checks (Android SDK, Java).
+2. **UI automation stack** *(single-select)* — `MAUI DevFlow`, `Appium`, `Both`, `None`. Gates the DevFlow, Appium, and Node.js checks and the DevFlow-agent registration check.
+3. **Optional dev tools in use** *(multi-select)* — `MAUI Sherpa`, `MAUI Skills plugin`. A tool selected here is expected on the machine; one not selected is skipped entirely.
+
+Then write the profile (create the folder first):
+```bash
+mkdir -p .nomad
+```
+Write `.nomad/doctor.json` in this shape (use today's date; map the answers to the enums shown):
+```json
+{
+  "version": 1,
+  "initializedAt": "YYYY-MM-DD",
+  "platforms": ["ios", "android"],
+  "uiAutomation": "devflow",
+  "optionalTools": ["maui-skills"]
+}
+```
+- `platforms`: any subset of `["ios", "android"]`
+- `uiAutomation`: one of `"devflow"`, `"appium"`, `"both"`, `"none"`
+- `optionalTools`: any subset of `["maui-sherpa", "maui-skills"]`
+
+Confirm the file was written, tell the user it's committed to git and can be changed anytime via `/nomad-maui-doctor init`, then continue to the checks.
+
+### How the profile gates checks
+
+A check tagged **[profile]** below reads the loaded profile:
+- A tool/platform the project **declares it uses** but that is **missing** → escalate severity (build-critical tools → **FAIL**; convenience tools → **INFO**, as each check notes).
+- A tool/platform the project **does not use** → **skip** the check entirely (do not run the command, do not print a report row).
+
+If the profile somehow failed to load, fall back to running every check at its default (non-escalated) severity.
 
 ---
 
@@ -35,7 +90,8 @@ Look for `maui-ios` and `maui-android` in the output.
 - FAIL if neither is installed
 - WARN additionally if any workload shows "update available" — note the update command: `dotnet workload update`
 
-### Xcode
+### Xcode  **[profile]**
+Only run if `ios` is in `platforms`; otherwise skip (don't print a row).
 ```bash
 xcodebuild -version 2>/dev/null || echo "NOT FOUND"
 ```
@@ -48,27 +104,29 @@ xcode-select -p 2>/dev/null || echo "NOT SET"
 ```
 - WARN if output is not pointing to a real Xcode.app (e.g. points to CLT-only path)
 
-### iOS Simulators
+### iOS Simulators  **[profile]**
+Only run if `ios` is in `platforms`; otherwise skip.
 ```bash
 xcrun simctl list devices available 2>/dev/null | grep -c "iPhone\|iPad" || echo "0"
 ```
 - PASS if count ≥ 1
 - WARN if 0 — no simulators available; create one via `xcrun simctl create`
 
-### Android SDK
+### Android SDK  **[profile]**
+Only run if `android` is in `platforms`; otherwise skip.
 ```bash
 adb --version 2>/dev/null || echo "NOT FOUND"
 ```
 - PASS if found
-- FAIL if not found and `net*-android` is present in any .csproj TargetFrameworks
-- INFO if not found and Android is not targeted
+- FAIL if not found (Android is a declared target platform)
 
 ```bash
 echo "ANDROID_HOME=${ANDROID_HOME:-NOT SET}" && echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-NOT SET}"
 ```
 - WARN if both `ANDROID_HOME` and `ANDROID_SDK_ROOT` are unset
 
-### Java / JDK
+### Java / JDK  **[profile]**
+Only run if `android` is in `platforms` (the JDK is needed for the Android toolchain); otherwise skip.
 ```bash
 java --version 2>/dev/null || echo "NOT FOUND"
 ```
@@ -83,30 +141,34 @@ git --version 2>/dev/null || echo "NOT FOUND"
 - PASS if found (any version)
 - FAIL if not found
 
-### MAUI DevFlow CLI  *(optional)*
+### MAUI DevFlow CLI  **[profile]**
+Run only if `uiAutomation` is `devflow` or `both`; otherwise skip.
 ```bash
 maui --version 2>/dev/null || echo "NOT FOUND"
 ```
 - PASS if found (any version)
-- INFO if not found — DevFlow is optional; it enables 4–7× faster AI-driven UI automation vs Appium (see `docs/appium-vs-maui-devflow.md`). Install via: `dotnet tool install -g Microsoft.Maui.DevFlow`
+- FAIL if not found — the project's automation stack relies on DevFlow. Install via: `dotnet tool install -g Microsoft.Maui.DevFlow` (see `docs/appium-vs-maui-devflow.md`)
 
-### Appium  *(optional)*
+### Appium  **[profile]**
+Run only if `uiAutomation` is `appium` or `both`; otherwise skip.
 ```bash
 appium --version 2>/dev/null || echo "NOT FOUND"
 ```
 - PASS if version 2.x
 - WARN if version 1.x (deprecated)
-- INFO if not found — optional, only needed for XCUITest/UiAutomator2 automation
+- FAIL if not found — the project's automation stack relies on Appium. Install via: `npm install -g appium`
 
-### Node.js
+### Node.js  **[profile]**
+Run only if `uiAutomation` is `appium` or `both` (Appium requires Node); otherwise skip.
 ```bash
 node --version 2>/dev/null || echo "NOT FOUND"
 ```
 - PASS if v18+
 - WARN if found but < v18
-- INFO if not found — only required if using Appium
+- FAIL if not found — required by Appium
 
-### MAUI Sherpa  *(optional)*
+### MAUI Sherpa  **[profile]**
+Run only if `maui-sherpa` is in `optionalTools`; otherwise skip.
 GUI desktop app — has no CLI, so detect the installed app bundle or Homebrew cask:
 ```bash
 ls -d "/Applications/MAUI Sherpa.app" "$HOME/Applications/MAUI Sherpa.app" 2>/dev/null | head -1 || { brew list --cask maui-sherpa >/dev/null 2>&1 && echo "installed (brew cask)"; } || echo "NOT FOUND"
@@ -114,13 +176,27 @@ ls -d "/Applications/MAUI Sherpa.app" "$HOME/Applications/MAUI Sherpa.app" 2>/de
 - PASS if an app bundle or brew cask is found
 - INFO if not found — optional dev-machine tool for managing Android SDKs, Apple certs/profiles, emulators, keystores & device inspectors (see `docs/maui-sherpa.md`). Install via: `brew install --cask redth/tap/maui-sherpa` (macOS) or download from the GitHub releases page.
 
-### MAUI Skills plugin  *(optional)*
+### MAUI Skills plugin  **[profile]**
+Run only if `maui-skills` is in `optionalTools`; otherwise skip.
 AI-agent skill pack — not a CLI on PATH; it installs as a Claude Code / Copilot CLI plugin. Detect via the Claude Code plugin registry or cached marketplace clone:
 ```bash
 grep -l "maui-skills" ~/.claude/plugins/installed_plugins.json ~/.claude/plugins/known_marketplaces.json 2>/dev/null || find ~/.claude/plugins/cache -maxdepth 2 -name maui-skills 2>/dev/null | grep . || echo "NOT FOUND"
 ```
 - PASS if the plugin or its marketplace is found
 - INFO if not found — optional reference resource: ~37 on-demand .NET MAUI / Xamarin-migration skills for AI coding agents (see `docs/maui-skills.md`). Install via: `/plugin marketplace add davidortinau/maui-skills` then `/plugin install maui-skills@maui-skills` (full steps in `docs/maui-skills-usage.md`). Detection only covers Claude Code; on Copilot CLI verify with `/skills`.
+
+### Syncfusion MAUI Skills  **[auto-detected]**
+Not profile-gated — this check keys off whether the project actually uses Syncfusion controls. First detect Syncfusion usage from any `.csproj`:
+```bash
+grep -rl "Syncfusion\.Maui" --include="*.csproj" . 2>/dev/null || echo "NOT USED"
+```
+- If the project does **not** reference `Syncfusion.Maui.*` → **skip** this check (don't print a row).
+- If it **does**, check whether the Syncfusion skills are installed, project-level or globally (best-effort across common Skills-CLI locations):
+```bash
+{ find . -path ./.git -prune -o -type d -name 'syncfusion-maui-*' -print 2>/dev/null; find ~/.claude/skills ~/.config/skills "$HOME/.skills" -type d -name 'syncfusion-maui-*' 2>/dev/null; } | head -1 | grep . || echo "NOT INSTALLED"
+```
+  - PASS if at least one `syncfusion-maui-*` skill directory is found (project or global).
+  - WARN if none found — the project uses Syncfusion controls but the matching agent skills aren't installed. Install via: `npx skills add syncfusion/maui-ui-components-skills` (requires Node ≥ 16; choose project-level to commit them or global to share across projects — see `docs/syncfusion-maui-skills.md`).
 
 ---
 
@@ -141,15 +217,15 @@ Read each .csproj found for the checks below.
 - FAIL if `ApplicationIdGuid` element is missing
 - PASS if a GUID is set
 
-### TargetFrameworks — both platforms
-- PASS if contains `net9.0-ios` or `net10.0-ios` (or newer)
-- PASS if contains `net9.0-android` or `net10.0-android` (or newer)
-- WARN for each platform that is missing
+### TargetFrameworks — match the profile  **[profile]**
+Compare the `.csproj` TargetFrameworks against the profile's `platforms`:
+- For each platform in `platforms` (`ios` → `net*-ios`, `android` → `net*-android`): PASS if a matching target (e.g. `net9.0-ios`/`net10.0-ios` or newer) is present; **FAIL** if the declared platform has no matching target.
+- If a target exists for a platform **not** in `platforms` (e.g. an `-ios` target but iOS wasn't selected) → **WARN** (profile/project mismatch — re-run `init` or fix the csproj).
 
-### SupportedOSPlatformVersion
-- WARN if iOS version is missing (recommended: ≥ 14.2)
-- WARN if Android version is missing (recommended: ≥ 21.0)
-- WARN if iOS < 14.2 or Android < 21
+### SupportedOSPlatformVersion  **[profile]**
+Only check the versions for platforms in the profile:
+- iOS (if `ios` in `platforms`): WARN if missing or < 14.2 (recommended: ≥ 14.2)
+- Android (if `android` in `platforms`): WARN if missing or < 21 (recommended: ≥ 21.0)
 
 ### Application Version numbers
 - INFO if both `ApplicationDisplayVersion` = `1.0` and `ApplicationVersion` = `1` — likely never updated from scaffold defaults
@@ -219,10 +295,11 @@ grep -rEc "(Button|Entry|Switch|Slider|CheckBox|Picker|DatePicker|TimePicker|Sea
 - WARN if AutomationId count = 0 — required for UI automation; every interactive element needs one
 - WARN if AutomationId count << interactive element count — some elements are missing IDs
 
-### DevFlow Agent registration  *(optional)*
+### DevFlow Agent registration  **[profile]**
+Run only if `uiAutomation` is `devflow` or `both`; otherwise skip.
 Read `MauiProgram.cs` and check for a `#if DEBUG` block that registers a DevFlow or automation agent.
 - PASS if found
-- INFO if not found — optional; recommended for AI-driven automation workflows (see `docs/appium-vs-maui-devflow.md`)
+- WARN if not found — the project uses DevFlow, so the agent should be registered under `#if DEBUG` (see `docs/appium-vs-maui-devflow.md`)
 
 ### CommunityToolkit.Mvvm  *(recommended)*
 ```bash
@@ -243,6 +320,12 @@ Print a formatted report like this:
 ║          [today's date]                          ║
 ╚══════════════════════════════════════════════════╝
 
+PROFILE  (.nomad/doctor.json — re-run with `init` to change)
+──────────────────────────────────────────────────
+Platforms        iOS, Android
+UI automation    devflow
+Optional tools   maui-skills
+
 ENVIRONMENT & TOOLS
 ──────────────────────────────────────────────────
 ✅ .NET SDK              [version]
@@ -253,9 +336,9 @@ ENVIRONMENT & TOOLS
 ✅ Java                  [version]
 ✅ Git                   [version]
 ℹ️  MAUI DevFlow CLI      not installed  (optional — see docs/appium-vs-maui-devflow.md)
-ℹ️  Appium               not installed  (optional)
 ℹ️  MAUI Sherpa          not installed  (optional — see docs/maui-sherpa.md)
 ℹ️  MAUI Skills plugin    not installed  (optional — see docs/maui-skills.md)
+⚠️  Syncfusion skills     project uses Syncfusion — skills not installed  (npx skills add syncfusion/maui-ui-components-skills)
 
 PROJECT CONFIGURATION
 ──────────────────────────────────────────────────
@@ -299,4 +382,4 @@ OPTIONAL (INFO)
   • Add CommunityToolkit.Mvvm NuGet package
 ```
 
-Adapt the table rows to only show items that actually apply — skip sections with no findings. Always close with the actions list.
+Adapt the table rows to only show items that actually apply — skip sections with no findings, and **omit any check skipped by the profile** (e.g. no iOS rows when iOS isn't a target platform; no Appium row unless the automation stack uses it). The PROFILE banner reflects the values loaded from `.nomad/doctor.json`. Always close with the actions list.

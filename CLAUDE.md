@@ -41,6 +41,7 @@ Optional tools (for automation and testing):
 | Node.js 18+ | Required by Appium |
 | MAUI Sherpa | Desktop GUI to manage Android SDKs, Apple certificates/profiles, emulators, keystores & device inspectors (see `docs/maui-sherpa.md`) |
 | MAUI Skills (Claude Code / Copilot plugin) | ~37 on-demand .NET MAUI & Xamarin-migration skills for AI coding agents — reference catalog in `docs/maui-skills.md`, install/usage in `docs/maui-skills-usage.md` |
+| Syncfusion MAUI Skills | Per-control AI-agent skills for Syncfusion MAUI controls — **expected only when the project references `Syncfusion.Maui.*` packages** (auto-detected by the doctor). Install: `npx skills add syncfusion/maui-ui-components-skills` (see `docs/syncfusion-maui-skills.md`) |
 
 ## Architecture Rules
 
@@ -101,4 +102,12 @@ This enables the faster DevFlow automation path described in `docs/appium-vs-mau
 
 When a new check is warranted, update **`plugins/nomad-maui-skills/skills/nomad-maui-doctor/SKILL.md`** — add it to the appropriate section with clear PASS/WARN/FAIL criteria.
 
-The goal: running `/nomad-maui-skills:nomad-maui-doctor` on a fresh clone should surface every missing setup step and every deviation from project conventions, without requiring prior knowledge of this repo.
+### Project profile (`.nomad/doctor.json`)
+
+The doctor is **profile-driven**. On first run (or via `/nomad-maui-doctor init`) it asks the user about the project — target platforms, UI automation stack, optional tools — and stores the answers in `.nomad/doctor.json` (committed to git). Checks tagged **[profile]** in `SKILL.md` use it to decide whether a tool is **required** (FAIL if missing), expected (INFO), or **skipped** entirely.
+
+When you add an **optional or conditional** tool (one that only some configurations use — an automation framework, a platform-specific SDK, a convenience tool), don't just add an always-on check. Instead:
+1. Add a profile dimension/answer for it in **Step 0 — Initialization Mode**, and extend the `.nomad/doctor.json` schema.
+2. Tag the new check **[profile]** and define its skip / escalation behavior against that profile value.
+
+The goal: running `/nomad-maui-skills:nomad-maui-doctor` on a fresh clone should surface every missing setup step and every deviation from project conventions — tailored to how *this* project is configured — without requiring prior knowledge of this repo.
