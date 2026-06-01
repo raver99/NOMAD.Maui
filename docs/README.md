@@ -2,6 +2,11 @@
 
 Best practices, tools, and research for .NET MAUI development.
 
+## Exploration Radar
+
+- [Exploration Radar](radar.md)  
+  Candidates noted for future exploration (libraries, tools, themes) — explicitly **not recommendations**. Items graduate to a proper guide once evaluated, or get parked with a reason.
+
 ## Conventions
 
 - [.NET MAUI Conventions & Best Practices](maui-conventions.md)  

@@ -12,6 +12,7 @@ The **.NET MAUI–specific** companion to the conceptual **NOMAD** project: a **
 - **Follow the conventions:** the MAUI conventions (MVVM, DI, AutomationId, DevFlow agent, screen boilerplate, app identity) are in [`docs/maui-conventions.md`](docs/maui-conventions.md).
 - **Use a tool or guide:** browse [`docs/README.md`](docs/README.md) — each tool (DevFlow, Sherpa, MAUI Skills, Syncfusion) has its own page.
 - **Install these skills elsewhere:** `/plugin marketplace add raver99/NOMAD.Maui` then `/plugin install nomad-maui-skills@nomad-maui-skills`.
+- **Note something to explore later:** add it to [`docs/radar.md`](docs/radar.md) — candidates noted but not yet recommended.
 
 ## Project structure
 
