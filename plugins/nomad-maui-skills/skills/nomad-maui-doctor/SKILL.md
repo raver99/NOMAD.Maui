@@ -143,11 +143,16 @@ git --version 2>/dev/null || echo "NOT FOUND"
 
 ### MAUI DevFlow CLI  **[profile]**
 Run only if `uiAutomation` is `devflow` or `both`; otherwise skip.
+DevFlow ships **inside the .NET MAUI CLI** (`Microsoft.Maui.Cli`); `maui devflow` is a subcommand. Detect via the global tool registry — **not** by invoking `maui` on PATH, because global dotnet tools live in `~/.dotnet/tools`, which isn't on PATH in the non-interactive shell the doctor runs in (so a working install would false-negative). Then confirm the command with that dir added to PATH:
 ```bash
-maui --version 2>/dev/null || echo "NOT FOUND"
+if dotnet tool list -g 2>/dev/null | grep -qiE '^microsoft\.maui\.cli'; then
+  PATH="$PATH:${HOME}/.dotnet/tools" maui --version 2>/dev/null | head -1
+else
+  echo "NOT FOUND"
+fi
 ```
-- PASS if found (any version)
-- FAIL if not found — the project's automation stack relies on DevFlow. Install via: `dotnet tool install -g Microsoft.Maui.DevFlow` (see `docs/appium-vs-maui-devflow.md`)
+- PASS if a version prints
+- FAIL if `NOT FOUND` — the project's automation stack relies on DevFlow. Install via: `dotnet tool install -g Microsoft.Maui.Cli --prerelease` (DevFlow is the `maui devflow` subcommand; experimental, currently documented under .NET MAUI 10 — see `docs/maui-devflow.md`)
 
 ### Appium  **[profile]**
 Run only if `uiAutomation` is `appium` or `both`; otherwise skip.
@@ -178,12 +183,12 @@ ls -d "/Applications/MAUI Sherpa.app" "$HOME/Applications/MAUI Sherpa.app" 2>/de
 
 ### MAUI Skills plugin  **[profile]**
 Run only if `maui-skills` is in `optionalTools`; otherwise skip.
-AI-agent skill pack — not a CLI on PATH; it installs as a Claude Code / Copilot CLI plugin. Detect via the Claude Code plugin registry or cached marketplace clone:
+AI-agent skill pack — not a CLI on PATH; it installs as a Claude Code / Copilot CLI plugin. Detect via the Claude Code plugin registry or cached marketplace clone. Match the **exact** plugin key / marketplace slug, never a bare `maui-skills` substring — that substring is also inside *this* plugin's id `nomad-maui-skills`, which would self-match (see Authoring notes):
 ```bash
-grep -l "maui-skills" ~/.claude/plugins/installed_plugins.json ~/.claude/plugins/known_marketplaces.json 2>/dev/null || find ~/.claude/plugins/cache -maxdepth 2 -name maui-skills 2>/dev/null | grep . || echo "NOT FOUND"
+grep -Eq '"maui-skills@maui-skills"|davidortinau/maui-skills' ~/.claude/plugins/installed_plugins.json ~/.claude/plugins/known_marketplaces.json 2>/dev/null && echo "FOUND" || { find ~/.claude/plugins/cache -maxdepth 2 -type d -name 'maui-skills' 2>/dev/null | grep -v 'nomad-maui-skills' | grep -q . && echo "FOUND" || echo "NOT FOUND"; }
 ```
-- PASS if the plugin or its marketplace is found
-- INFO if not found — optional reference resource: ~37 on-demand .NET MAUI / Xamarin-migration skills for AI coding agents (see `docs/maui-skills.md`). Install via: `/plugin marketplace add davidortinau/maui-skills` then `/plugin install maui-skills@maui-skills` (full steps in `docs/maui-skills-usage.md`). Detection only covers Claude Code; on Copilot CLI verify with `/skills`.
+- PASS if output is `FOUND`
+- INFO if output is `NOT FOUND` — optional reference resource: ~37 on-demand .NET MAUI / Xamarin-migration skills for AI coding agents (see `docs/maui-skills.md`). Install via: `/plugin marketplace add davidortinau/maui-skills` then `/plugin install maui-skills@maui-skills` (full steps in `docs/maui-skills-usage.md`). Detection only covers Claude Code; on Copilot CLI verify with `/skills`.
 
 ### Syncfusion MAUI Skills  **[auto-detected]**
 Not profile-gated — this check keys off whether the project actually uses Syncfusion controls. First detect Syncfusion usage from any `.csproj`:
@@ -258,7 +263,7 @@ test -f .gitignore && echo "FOUND" || echo "NOT FOUND"
 find . -type d -name "ViewModels" -not -path "*/.git/*"
 ```
 - PASS if found
-- WARN if not found — MVVM pattern requires a ViewModels directory; see CLAUDE.md for architecture guidelines
+- WARN if not found — MVVM pattern requires a ViewModels directory; see `docs/maui-conventions.md` for architecture guidelines
 
 ### Pages directory
 ```bash
@@ -377,9 +382,22 @@ SHOULD FIX (WARN)
   • Customise app icon and splash screen colours
 
 OPTIONAL (INFO)
-  • Install MAUI DevFlow CLI for AI-driven automation
+  • Install MAUI DevFlow CLI for AI-driven automation (dotnet tool install -g Microsoft.Maui.Cli --prerelease)
   • Register DevFlow agent in MauiProgram.cs (#if DEBUG)
   • Add CommunityToolkit.Mvvm NuGet package
 ```
 
 Adapt the table rows to only show items that actually apply — skip sections with no findings, and **omit any check skipped by the profile** (e.g. no iOS rows when iOS isn't a target platform; no Appium row unless the automation stack uses it). The PROFILE banner reflects the values loaded from `.nomad/doctor.json`. Always close with the actions list.
+
+---
+
+## Authoring notes
+
+When adding or editing detection commands, follow these rules:
+
+- **Anchor on a unique token, never a bare product-name substring.** Plugin and tool ids tend to embed each other's names (e.g. `maui-skills` is a substring of this very plugin's id `nomad-maui-skills`), so a loose `grep "maui-skills"` self-matches and false-positives. Match the exact, quoted plugin key (`"maui-skills@maui-skills"`), marketplace slug (`davidortinau/maui-skills`), or an anchored glob (`-name 'syncfusion-maui-*'`).
+- **Branch on exit code, not on `-l` output.** Use `grep -Eq … && echo "FOUND" || echo "NOT FOUND"` so the `||` chain is predictable. Have each command print a clear sentinel (`FOUND` / `NOT FOUND` / `NOT USED` / `NOT INSTALLED`) and key the PASS/WARN/FAIL/INFO criteria off that sentinel.
+- **Avoid `grep -qv` to exclude a term** — on BSD/macOS grep, `grep -qv` returns exit 0 on *empty* input, which silently flips a "nothing found" into a match. Filter then test instead: `… | grep -v 'exclude-me' | grep -q .`.
+- **Test the regression case**, not just the happy path: confirm the check reports negative on a machine that has only the look-alike (e.g. `nomad-maui-skills` installed but `davidortinau/maui-skills` not).
+- **Detect global dotnet tools via `dotnet tool list -g`, not by invoking the command on PATH.** Global tools live in `~/.dotnet/tools`, which the user's shell profile adds to PATH but the doctor's non-interactive shell does not — so `sometool --version` false-negatives even when installed. Query the registry, then (if you need the version) run the command with `PATH="$PATH:${HOME}/.dotnet/tools"` prepended.
+- **Verify every install command against a real feed before shipping it.** Run a quick `dotnet package search <id>` / `npm view <pkg>` over each referenced package — a wrong id (e.g. the nonexistent `Microsoft.Maui.DevFlow` CLI tool, which is actually `Microsoft.Maui.Cli`) sends users down a dead end.
