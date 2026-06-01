@@ -1,0 +1,21 @@
+{
+  "name": "nomad-maui-skills",
+  "owner": {
+    "name": "rolandhuhn"
+  },
+  "metadata": {
+    "description": ".NET MAUI cross-project skills — doctor checks, tooling, and best practices"
+  },
+  "plugins": [
+    {
+      "name": "nomad-maui-skills",
+      "source": "./plugins/nomad-maui-skills",
+      "description": "Cross-project .NET MAUI skills: /nomad-maui-doctor for environment and project health checks.",
+      "version": "1.0.0",
+      "author": {
+        "name": "rolandhuhn"
+      },
+      "repository": "https://github.com/rolandhuhn/NOMAD.Maui"
+    }
+  ]
+}
