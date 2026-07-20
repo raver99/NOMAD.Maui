@@ -492,6 +492,31 @@ AFTER  (via DevFlow):  "HOTRELOAD_MARKER credentials rejected."
 (measured 101/110/98ms on successive edits) — at parity with, and warm slightly faster than,
 Flutter's 220ms.
 
+### Where the wall-clock actually goes
+
+The 103ms figure is the *apply* step. Decomposed against the file write (5 runs):
+
+| Phase | Mean |
+|---|---|
+| write → watch detects | **0.07s** |
+| write → change applied | **0.17s** (watch reports ~103ms) |
+| write → observable via DevFlow | **0.67s** (incl. 3 calls to fill, tap, read) |
+
+**0.67s end-to-end machine-side.** In live use the perceived delay was several seconds —
+all of it agent-side: model round-trip, per-tool-call overhead, and defensive `sleep 8`/`10`
+calls added on the assumption that detection was slow. It is not; it is 0.07s.
+
+This is the session's own lesson turned on its author: the tool was fast and the usage was
+slow. Anyone scripting this loop should poll the watch log for `changes applied` rather than
+sleeping, and note that `grep` treats that log as **binary** (it contains 🔥/⌚ emoji) and
+silently prints nothing — use `grep -a`.
+
+**Signalling asymmetry vs Flutter.** Flutter's agent calls `hot_reload` explicitly: 0.26s,
+synchronous, with a definite completion result. MAUI's agent writes a file and waits to be
+noticed: 0.17s, but watcher-mediated with no completion signal except a log line. MAUI is
+marginally faster on the apply path; Flutter's is deterministic. The absence of a completion
+signal is what invites the defensive sleeps that dominated the real cost here.
+
 ### Caveats measured, not assumed
 
 - **XAML hot reload does not work.** Editing `Text="Sign In"` produced
