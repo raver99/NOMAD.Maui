@@ -463,19 +463,67 @@ because the named-pipe path can't reach the simulator. iOS additionally requires
 .NET 11 is **still preview** as of July 2026 (Preview 6 shipped 2026-07-14); GA is targeted
 for **2026-11-10**.
 
+## .NET 11 Preview 4 — tested, and it works
+
+Installed the .NET 11 Preview 4 SDK (`11.0.100-preview.4.26230.115`) user-local alongside
+.NET 10, pinned via `global.json`, with a `net11.0-ios` copy of the benchmark app and
+`<MtouchLink>None</MtouchLink>`.
+
+**C# hot reload works, and DevFlow can drive the hot-reloaded app.** Full loop verified:
+
+```
+BEFORE (via DevFlow):  "Invalid credentials. Please check username and password."
+   edit LoginViewModel.cs → dotnet watch 🔥 C# changes applied in 245ms
+AFTER  (via DevFlow):  "HOTRELOAD_MARKER credentials rejected."
+   revert → applied again → original string restored
+```
+
+| | .NET 10 GA | .NET 11 Preview 4 |
+|---|---|---|
+| `dotnet watch` enters watch state | ❌ never | ✅ "Waiting for changes" |
+| Detects a file edit | ❌ | ✅ ~2s |
+| **C# change applied** | ❌ | ✅ **245ms, effect verified** |
+| XAML change applied | ❌ | ⚠️ **reported applied, did NOT take effect** |
+| DevFlow agent runs on the TFM | ✅ | ✅ (contradicts "net10-only") |
+| DevFlow drives the watch-launched app | n/a | ✅ agent on port 9223 |
+
+**This collapses MAUI's one structural gap.** Edit→verify for a C# change goes from ~9s
+(rebuild + reinstall + relaunch) to **~0.25s** — the same order as Flutter's 0.22s.
+
+### Caveats measured, not assumed
+
+- **XAML hot reload does not work.** Editing `Text="Sign In"` produced
+  `🔥 C# and Razor changes applied in 754ms` — note the wording, *C# and Razor*, not XAML —
+  and a screenshot confirmed the running app still showed the old text. Reported success is
+  not proof of effect, exactly as with Flutter. Budget a rebuild for XAML changes.
+- **`--device <udid>` must be passed directly to `dotnet watch`**, not after `--` and not as
+  `--property:_DeviceName=`. Both of those are silently ignored.
+- **The device picker renders an empty list** when stdin is not a TTY, failing with
+  "multiple devices are available" and listing nothing — even with a single booted simulator.
+  Non-interactive/agent use must pass `--device` explicitly.
+- **Xcode pinning is the real gate.** Preview 6's iOS SDK requires **Xcode 26.6**; Preview 4's
+  builds against **Xcode 26.4**. Choose the preview that matches the installed Xcode, not the
+  newest preview.
+- Remove the explicit `Microsoft.Maui.Controls` / `Microsoft.Maui.Essentials` pins when
+  retargeting to net11 — they trigger `NU1605` downgrade errors against the workload's
+  implicit 11.x references.
+
 ### Consequence for the "hot-reload bridge" idea
 
 Earlier in this research the missing reload trigger looked like a gap NOMAD.Maui could close
 with a thin shim. That conclusion no longer holds, in both directions:
 
-- **Today it is not buildable.** There is no CLI-hostable delta channel on .NET 10 — no env
-  var, no `dotnet build -t:Run` variant, no `dotnet-dsrouter` path, no third-party tool. A
-  clean negative.
-- **Tomorrow it is unnecessary.** .NET 11 ships the capability natively. The useful work is
-  not a bridge but **wiring DevFlow's driving alongside `dotnet watch`'s reloading** once
-  .NET 11 is GA, and re-running the edit→verify measurement then.
+- **On .NET 10 it is not buildable.** No CLI-hostable delta channel exists — no env var, no
+  `dotnet build -t:Run` variant, no `dotnet-dsrouter` path, no third-party tool.
+- **On .NET 11 it is unnecessary** — and this is now measured, not projected. `dotnet watch`
+  reloads and DevFlow drives, in the same session, with no shim between them. The two
+  compose already.
 
-Until then MAUI's edit→verify floor stays at rebuild+deploy (~9s), against Flutter's ~0.22s.
+So the contribution is not a bridge. It is **documenting the working configuration** —
+`--device` passed directly, an Xcode-matched preview, no Controls/Essentials pins, and the
+knowledge that XAML changes still need a rebuild while C# changes do not.
+
+On .NET 10 the edit→verify floor stays at ~9s. On .NET 11 Preview 4 it is ~0.25s for C#.
 
 ---
 
