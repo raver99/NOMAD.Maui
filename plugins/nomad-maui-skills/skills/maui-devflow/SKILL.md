@@ -128,13 +128,59 @@ Symptom when you get it wrong: every later `--wait-until` burns its **full timeo
 
 `ui query` reports tabs before Shell will accept taps on them. Tapping too early **silently no-ops** and every downstream wait then times out. Wait for a tab to exist, then pause ~1.5s before the first tap.
 
+### Hot reload — **.NET 11 only**, and poll instead of sleeping
+
+> **Applies to `net11.0-ios` with .NET 11 Preview 4+ only.** On **.NET 10 there is no hot
+> reload from the CLI at all** — `dotnet watch` prints "🔥 Hot reload enabled", then never
+> watches and ignores every edit. On net10, budget a rebuild (~9s) per change.
+
+Setup (all four matter):
+
+```xml
+<TargetFrameworks>net11.0-ios</TargetFrameworks>
+<MtouchLink>None</MtouchLink>          <!-- required; watch does nothing without it -->
+```
+- Pick the preview whose iOS SDK matches your installed Xcode (P4→Xcode 26.4, P6→26.6).
+- **Remove** explicit `Microsoft.Maui.Controls` / `Microsoft.Maui.Essentials` pins (net11
+  inverts the net10 rule — pins now cause `NU1605`).
+- Pass **`--device <udid>` directly to `dotnet watch`**. After `--`, or as
+  `--property:_DeviceName=`, it is silently ignored; the picker also renders an empty device
+  list when stdin is not a TTY, so non-interactive runs must pass it.
+
+```bash
+dotnet watch --framework net11.0-ios \
+  --property:RuntimeIdentifier=iossimulator-arm64 \
+  --device <udid> > /tmp/watch.log 2>&1 &
+```
+
+The DevFlow agent runs happily inside the watched app, so you reload and drive in one session.
+
+**Don't sleep — poll the log.** Measured latencies from the file write:
+
+| write → watch detects | write → applied | write → observable via DevFlow |
+|---|---|---|
+| **0.07s** | **0.17s** (~100ms reported) | **0.67s** |
+
+A defensive `sleep 8` costs more than the entire loop. Wait on the actual signal:
+
+```bash
+before=$(wc -c < /tmp/watch.log)
+# ...make the edit...
+until tail -c +$((before+1)) /tmp/watch.log | grep -aq "changes applied"; do sleep 0.1; done
+```
+
+**Use `grep -a`.** The watch log contains emoji (🔥 ⌚), so `grep` treats it as binary and
+prints *nothing* while silently matching — it looks like the reload never happened.
+
+**XAML does not hot reload.** Editing XAML logs `C# and Razor changes applied` and the UI
+does **not** update. That message is about C#/Razor; treat XAML edits as needing a rebuild.
+
 ## 6. Gotchas & tips
 
 - **Shell `Tab`s don't resolve via `--automationId`** (measured on CLI `0.1.0-preview.10.26274.3`). `ui query --selector "#SettingsTab"` finds the tab; `--automationId "SettingsTab"` returns nothing and `ui tap --automationId` errors with a misleading *"Check automationId spelling"*. Tap tabs with `--text "Settings" --type Tab`. Regular controls resolve fine either way.
 - **`fill` and `set-property` take positional arguments**, not flags: `ui fill <Id> <text>`, `ui set-property <Id> <Property> <Value>`. Using `--automationId` with `fill` fails ("required argument missing") because the text binds to the elementId slot.
 - **`network` (bare) is a streaming watch that never returns** — the one-shot is `network list`. It also does **not** capture native `HttpClient` traffic; only logs will show it.
-- **Hot reload: .NET 11 only, C# only.** On **.NET 11 Preview 4+**, `dotnet watch` applies C# changes to a running iOS Simulator app in ~250ms first / ~100ms warm, and the DevFlow agent runs alongside it — so you can reload and drive in one session. Requirements: `<MtouchLink>None</MtouchLink>`, a preview whose iOS SDK matches your installed Xcode (P4→Xcode 26.4, P6→26.6), no explicit `Microsoft.Maui.Controls`/`Essentials` pins, and **`--device <udid>` passed directly to `dotnet watch`** (after `--` or via `--property:_DeviceName=` it is silently ignored; the picker also renders an empty device list when stdin is not a TTY). **XAML changes do not hot reload** — watch reports "C# and Razor changes applied" but the UI does not update; rebuild for XAML.
-- **There is no hot reload on .NET 10 — budget for a rebuild.** `dotnet watch --framework net10.0-ios` builds, launches, and prints "🔥 Hot reload enabled", but never enters a watching state and ignores every edit (measured). The banner is unconditional boilerplate. The `Socket error while connecting to IDE on 127.0.0.1:10000` line is the legacy Xamarin debugger channel, not hot reload — benign. `dotnet watch` for MAUI iOS/Android arrives in **.NET 11 Preview 4** and needs `<MtouchLink>None</MtouchLink>`; .NET 11 GA is targeted for 2026-11-10. Until then the edit→verify loop is rebuild + reinstall + relaunch (~9s on this hardware).
+- **The .NET 10 "Hot reload enabled" banner is a lie** — `dotnet watch` prints it on net10 iOS, then never watches. The `Socket error while connecting to IDE on 127.0.0.1:10000` line alongside it is the legacy Xamarin debugger channel, not hot reload — benign noise. See *Hot reload* in section 5; .NET 11 GA is targeted 2026-11-10.
 - **Discover the real command surface** with `maui devflow commands` — machine-readable JSON of every command, with a `mutating` flag. Better than guessing from docs, including these.
 - **`isVisible: true` does not mean on-screen.** An element clipped outside its parent still reports visible; compare `bounds` against the parent/screen to detect layout defects. MAUI emits no overflow warning of its own.
 - **Target elements by `AutomationId`, not element id.** DevFlow falls back to opaque generated ids (e.g. `6a52a05152fd`) when a control lacks an `AutomationId` — brittle and unreadable. Ensure every interactive control has one (this project mandates it).
