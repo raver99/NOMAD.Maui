@@ -83,7 +83,7 @@ maui devflow --version
 ### Inspect the visual tree
 
 ```bash
-maui devflow MAUI tree
+maui devflow -p ios ui tree
 ```
 
 Dumps all elements with: control type, `AutomationId`, bounding rectangles, and property values. Use this first to orient an automation session or debug layout issues.
@@ -91,14 +91,15 @@ Dumps all elements with: control type, `AutomationId`, bounding rectangles, and 
 Filter with a CSS selector:
 
 ```bash
-maui devflow MAUI tree --query "Button"
-maui devflow MAUI tree --query "#LoginButton"
+maui devflow -p ios ui query --selector "#LoginButton"   # by AutomationId — most reliable form
+maui devflow -p ios ui query --selector "Button"         # by type
+maui devflow -p ios ui query --selector "Grid[automationId^=Revision_]"   # by prefix
 ```
 
 ### Take a screenshot
 
 ```bash
-maui devflow MAUI screenshot -o screenshot.png
+maui devflow -p ios ui screenshot --output screenshot.png
 ```
 
 Works on all supported platforms. Both the CLI and the AI agent can capture screenshots this way.
@@ -106,7 +107,7 @@ Works on all supported platforms. Both the CLI and the AI agent can capture scre
 ### Tap an element
 
 ```bash
-maui devflow agent interact tap --automationid "LoginButton"
+maui devflow -p ios ui tap --automationId "LoginButton"
 ```
 
 Simulates a real user tap, triggering event handlers and commands.
@@ -114,7 +115,7 @@ Simulates a real user tap, triggering event handlers and commands.
 ### Fill text
 
 ```bash
-maui devflow agent interact fill --automationid "UsernameEntry" --text "testuser@example.com"
+maui devflow -p ios ui fill UsernameEntry "testuser@example.com"
 ```
 
 Clears existing text and writes directly to the MAUI `Entry` binding — not via simulated keystrokes. This is why fill is 10–11× faster than Appium's `sendKeys`.
@@ -122,16 +123,20 @@ Clears existing text and writes directly to the MAUI `Entry` binding — not via
 ### Scroll
 
 ```bash
-maui devflow agent interact scroll --automationid "ItemList" --direction down
+maui devflow -p ios ui scroll --element "ItemList" --dy -400
 ```
 
-Supported directions: `up`, `down`, `left`, `right`. Works on `ScrollView` and `CollectionView`.
+Scrolling is by pixel delta (`--dy` negative scrolls down, `--dx` for horizontal), not by named direction. Works on `ScrollView` and `CollectionView`. To reach a known row in a `CollectionView`, jump straight to it instead of scrolling repeatedly:
+
+```bash
+maui devflow -p ios ui scroll --element "ItemList" --item-index 137
+```
 
 ### Navigate
 
 ```bash
 # Shell-based apps
-maui devflow agent interact navigate --route "//MainPage/Details"
+maui devflow -p ios ui navigate "//MainPage/Details"
 
 # NavigationPage-based apps — specify target page type
 ```
@@ -139,10 +144,69 @@ maui devflow agent interact navigate --route "//MainPage/Details"
 ### Mutate a property (runtime debugging)
 
 ```bash
-maui devflow agent interact mutate --automationid "StatusLabel" --property "Text" --value "Overridden"
+maui devflow -p ios ui set-property StatusLabel Text "Overridden"
 ```
 
 Applied immediately to the running app. Not persisted — resets on restart. Useful for testing visual states without rebuilding.
+
+---
+
+## Making the agent loop fast
+
+Raw action latency is rarely what makes an agent session feel slow. The usual culprits are
+round trips (act, then separately observe), screenshot-polling while an async load finishes,
+and tree dumps large enough to flood the agent's context. DevFlow has flags for all three.
+
+### Combine action and observation in one call
+
+Instead of a tap followed by a separate screenshot, do both at once:
+
+```bash
+maui devflow -p ios ui tap --automationId "LoginButton" --and-screenshot after.png
+maui devflow -p ios ui tap --automationId "LoginButton" --and-tree --and-tree-depth 3
+```
+
+Halves the round trips on every interaction. Available on `tap` and `fill`.
+
+### Wait for async loads instead of polling
+
+```bash
+maui devflow -p ios ui query --selector "#ProjectList" --wait-until exists --timeout 10
+```
+
+Blocks until the element appears. An agent that instead screenshots repeatedly while a
+spinner spins burns a model round trip per look.
+
+### Keep tree dumps small
+
+```bash
+maui devflow -p ios ui tree --format compact --depth 4
+maui devflow -p ios ui tree --fields id,type,automationId,text
+```
+
+`compact` returns `id,type,text,automationId,bounds` only. Full dumps of a busy screen are
+usually more context than the agent needs.
+
+### Script the setup, don't re-derive it
+
+`maui devflow batch` reads **plain CLI command lines** on stdin (not JSONL, despite the JSONL
+output) and writes one `{command, exit_code, output}` JSON object per line:
+
+```bash
+printf '%s\n' 'ui navigate "//projects"' 'ui tap --automationId Project_137' \
+  | maui devflow -p ios batch --continue-on-error --delay 0
+```
+
+**Pass `--delay 0`.** The default inter-command delay dominates: a 12-command script measured
+4.60s at the default versus **2.07s** with `--delay 0` — and only the latter beats running the
+same commands as separate CLI processes (2.69s).
+
+When a test targets a screen four navigations deep, the navigation is not the thing under
+test. Replaying it as one batched call removes a model round trip *per step* — and unlike a
+screenshot-driven path, it costs the same whether the agent has seen the app before or not.
+
+See [MAUI vs Flutter agent loop](research/maui-vs-flutter-agent-loop.md) for where these
+costs actually land.
 
 ---
 
@@ -157,7 +221,7 @@ DevFlow uses a CSS selector engine to query the MAUI visual tree.
 | `.MyClass` | Elements with `StyleClass="MyClass"` |
 | `StackLayout > Button` | Direct child `Button`s of a `StackLayout` |
 
-Selectors work in the CLI (`--query`), in MCP tool calls, and in the HTTP API.
+Selectors work in the CLI (`--selector`), in MCP tool calls, and in the HTTP API.
 
 ---
 
@@ -194,7 +258,7 @@ This launches a stdio-based MCP server. Add it to your AI tool's config:
 | **Property** | Inspect and mutate element properties |
 | **Assert** | UI assertions for testing |
 | **Logs** | Read app logs |
-| **Network** | HTTP request/response monitoring |
+| **Network** | HTTP request/response monitoring — see caveat below |
 | **Storage** | Sandboxed file access (list, download, upload, delete) |
 | **Preferences** | App preferences read/write |
 | **Platform** | Device and platform info |
@@ -267,6 +331,40 @@ DevFlow's screenshot call is fast and equal in cost to Appium's (both hit the si
 ### Keep your MCP tool vocabulary small and purposeful
 
 From the agent benchmark sessions: when the tool surface is clean and well-scoped, AI agents stay on task. When tools are awkward or require boilerplate (like Appium's session create/destroy), agents burn extra tool calls managing infrastructure rather than testing the app. DevFlow's four core MCP tools (`fill`, `query`, `screenshot`, `tap`) were enough for a complete bug-hunt session. Only expose what you need.
+
+### `network` does not capture native `HttpClient` traffic
+
+Measured: an app that logged `DIAG_HTTP_STATUS 503` — proving the request completed — produced
+an **empty** `network list`. The network category appears to cover Blazor/WebView (CDP)
+traffic rather than native .NET HTTP. Use app logs to observe native requests.
+
+Also note `maui devflow network` with no subcommand is a **streaming watch that never
+returns**; the one-shot is `maui devflow network list`. A blocking command that prints nothing
+is easily mistaken for a hang.
+
+### Shell `Tab` elements don't resolve via `--automationId`
+
+Measured on `Microsoft.Maui.Cli 0.1.0-preview.10.26274.3`. For a `Tab` in a Shell `TabBar`,
+`--automationId` finds nothing even when the `AutomationId` is set correctly, while the
+equivalent CSS selector works:
+
+```bash
+maui devflow -p ios ui query --automationId "SettingsTab"   # → []
+maui devflow -p ios ui query --selector "#SettingsTab"      # → found
+```
+
+Regular controls (`Button`, `Entry`, …) resolve fine either way — this is specific to `Tab`.
+
+`ui tap` has no `--selector`, so tapping a tab needs the text form:
+
+```bash
+maui devflow -p ios ui tap --text "Settings" --type Tab
+```
+
+Worth knowing because the failure is actively misleading: `tap --automationId "SettingsTab"`
+errors with *"Check automationId spelling"* when the spelling is correct. An agent that
+believes the suggestion re-dumps the tree and re-reads the XAML before finding the real
+cause — several wasted turns, every session.
 
 ### Avoid iOS Simulator keyboard visibility issues on iOS 26.x
 

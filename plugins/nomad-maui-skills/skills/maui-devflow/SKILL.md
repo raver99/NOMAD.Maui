@@ -66,19 +66,75 @@ xcrun simctl launch "$udid" <ApplicationId>
 
 ## 4. Drive it
 
+UI commands live under `ui`, and the platform goes on the `devflow` verb (`-p ios|android|maccatalyst|windows`). There is **no `MAUI` or `agent interact` subcommand** — `agent` only discovers/inspects connected agents.
+
 ```bash
 export PATH="$PATH:$HOME/.dotnet/tools"
-maui devflow MAUI tree                                   # dump the live visual tree (JSON)
-maui devflow MAUI tree --query "#LoginButton"            # filter by AutomationId
-maui devflow MAUI screenshot -o screen.png               # capture
-maui devflow agent interact tap   --automationid "LoginButton"
-maui devflow agent interact fill  --automationid "UsernameEntry" --text "a@b.com"
-maui devflow agent interact scroll --automationid "ItemList" --direction down
+maui devflow -p ios ui tree                                       # dump the live visual tree (JSON)
+maui devflow -p ios ui query --selector "#LoginButton"            # find one element (most reliable form)
+maui devflow -p ios ui screenshot --output screen.png             # capture
+maui devflow -p ios ui tap  --automationId "LoginButton"
+maui devflow -p ios ui fill UsernameEntry "a@b.com"                # elementId AND text are positional
+maui devflow -p ios ui scroll --element "ItemList" --dy -400      # negative dy scrolls down
+maui devflow -p ios ui navigate "//MainPage/Details"              # route is positional
 ```
-The agent needs a moment to start its HTTP server after launch — retry `tree` a couple of times if the first call doesn't connect.
+Run `maui devflow ui <cmd> --help` to confirm flags — this is experimental and they move between previews.
 
-## 5. Gotchas & tips
+The agent needs a moment to start its HTTP server after launch — retry `ui tree` a couple of times if the first call doesn't connect.
 
+## 5. Keep the loop fast
+
+Action latency is rarely the bottleneck; round trips are. Prefer these over the naive act-then-look pattern:
+
+```bash
+maui devflow -p ios ui tap --automationId "LoginButton" --and-screenshot after.png  # act + observe, one call
+maui devflow -p ios ui query --selector "#List" --wait-until exists --timeout 10    # wait, don't screenshot-poll
+maui devflow -p ios ui tree --format compact --depth 4                             # small dumps, not full trees
+maui devflow -p ios ui scroll --element "List" --item-index 137                     # jump to a row directly
+maui devflow batch --continue-on-error --delay 0 < setup.txt        # replay setup; --delay 0 matters
+```
+
+When the screen under test is several navigations deep, script the navigation with `batch` rather than re-deriving it visually each run — the setup steps aren't what's being tested. `batch` reads **plain CLI lines** on stdin (one command per line, no `maui devflow` prefix) and returns one JSON result per line.
+
+Scope queries instead of dumping the tree — attribute-prefix selectors work and are dramatically cheaper:
+
+```bash
+maui devflow -p ios ui query --selector "Grid[automationId^=Revision_]" --format compact
+```
+
+Counting rows this way instead of grepping a full `ui tree` cut one measured step from **188 KB to 3 KB at identical speed**.
+
+### Wait on *data*, not on the container
+
+This is the most expensive mistake available here, and it fails silently.
+
+`--wait-until exists` waits for the **element**, not its content. A `CollectionView`, a page root, or a `Label` bound to a not-yet-loaded property all exist *immediately* — so the wait returns at once and the next command acts on an empty screen. There is no `--wait-until non-empty`.
+
+```bash
+# WRONG — the list exists before its items load; the scroll then hits an empty list
+maui devflow -p ios ui query --selector "#ProjectList" --wait-until exists --timeout 10
+maui devflow -p ios ui scroll --element ProjectList --item-index 136
+
+# RIGHT — wait for a row, which cannot exist before the data arrives
+maui devflow -p ios ui query --selector "#Project_1" --wait-until exists --timeout 10
+maui devflow -p ios ui scroll --element ProjectList --item-index 136
+```
+
+Same trap when reading a computed label: wait for a data-dependent child (`#Revision_1`), then read the label. Waiting on the label itself returns `"text": ""`.
+
+Symptom when you get it wrong: every later `--wait-until` burns its **full timeout** and the run takes ~10s per step instead of ~0.15s.
+
+### After launching or reinstalling, let the Shell settle
+
+`ui query` reports tabs before Shell will accept taps on them. Tapping too early **silently no-ops** and every downstream wait then times out. Wait for a tab to exist, then pause ~1.5s before the first tap.
+
+## 6. Gotchas & tips
+
+- **Shell `Tab`s don't resolve via `--automationId`** (measured on CLI `0.1.0-preview.10.26274.3`). `ui query --selector "#SettingsTab"` finds the tab; `--automationId "SettingsTab"` returns nothing and `ui tap --automationId` errors with a misleading *"Check automationId spelling"*. Tap tabs with `--text "Settings" --type Tab`. Regular controls resolve fine either way.
+- **`fill` and `set-property` take positional arguments**, not flags: `ui fill <Id> <text>`, `ui set-property <Id> <Property> <Value>`. Using `--automationId` with `fill` fails ("required argument missing") because the text binds to the elementId slot.
+- **`network` (bare) is a streaming watch that never returns** — the one-shot is `network list`. It also does **not** capture native `HttpClient` traffic; only logs will show it.
+- **Discover the real command surface** with `maui devflow commands` — machine-readable JSON of every command, with a `mutating` flag. Better than guessing from docs, including these.
+- **`isVisible: true` does not mean on-screen.** An element clipped outside its parent still reports visible; compare `bounds` against the parent/screen to detect layout defects. MAUI emits no overflow warning of its own.
 - **Target elements by `AutomationId`, not element id.** DevFlow falls back to opaque generated ids (e.g. `6a52a05152fd`) when a control lacks an `AutomationId` — brittle and unreadable. Ensure every interactive control has one (this project mandates it).
 - **Android is in progress.** Needs `adb reverse tcp:<port> tcp:<port>` to reach the in-app agent; prefer iOS simulator or Mac Catalyst for now.
 - **Release safety.** Keep the package reference and registration both behind Debug — never ship the agent.
