@@ -408,6 +408,77 @@ sharpens both halves:
 
 ---
 
+## `dotnet watch` on .NET 10 — tested, and it does not work
+
+Tested directly (2026-07-21, SDK 10.0.100, net10.0-ios, iOS Simulator, Xcode 26.1):
+
+```bash
+dotnet watch --framework net10.0-ios --property:RuntimeIdentifier=iossimulator-arm64
+```
+
+It runs, prints **"🔥 Hot reload enabled"**, builds successfully, and launches the app via
+`xcrun simctl launch --console`. Then nothing. It **never enters a watching state** — no
+"waiting for a file to change" line ever appears — and it does not react to source edits at
+all. Tested with both an inode-replacing `sed -i ''` edit and an inode-preserving Python
+rewrite; across 45s and 30s waits the log did not grow by a single byte, and the running app
+kept its old behaviour.
+
+**The banner is unconditional CLI boilerplate, not a capability signal for mobile targets.**
+
+### Why, mechanically
+
+`dotnet watch`'s desktop hot-reload transport is a **named pipe** — the SDK ships
+`Microsoft.Extensions.DotNetDeltaApplier.dll` with `Microsoft.DotNet.HotReload.PipeListener`,
+injected into the target process via a startup hook. A sandboxed iOS Simulator process cannot
+be reached that way, and on .NET 10 no alternative transport exists for mobile.
+
+**Correction to an earlier hypothesis in this document's history:** the app also logs
+`Microsoft.iOS: Socket error while connecting to IDE on 127.0.0.1:10000: Connection refused`,
+and I initially read that as the hot-reload delta channel failing to find a host. It is not.
+That string comes from `runtime/monotouch-debug.m` in `dotnet/macios` and belongs to the
+**legacy Xamarin soft-debugger** attach channel (`__XAMARIN_DEBUG_PORT__` and friends). It
+fires on every Debug launch regardless of hot-reload intent. It is benign noise, not evidence
+that hot reload nearly worked.
+
+### What .NET 11 changes
+
+`dotnet watch` for MAUI Android and iOS Simulator arrives in **.NET 11 Preview 4**
+(2026-05-12) — Microsoft's own MAUI release notes date the capability to that preview, which
+confirms by omission that it did not work on .NET 10.
+([whats-new/dotnet-11](https://learn.microsoft.com/en-us/dotnet/maui/whats-new/dotnet-11?view=net-maui-10.0),
+[preview4 notes](https://github.com/dotnet/core/blob/main/release-notes/11.0/preview/preview4/dotnetmaui.md))
+
+Three bugs fixed in that preview match the symptom measured here — a stuck TFM/device picker
+from duplicate `Console.ReadKey()` readers, a WebSocket teardown exception, and a Hot Reload
+deadlock with `UIKitSynchronizationContext`
+([sdk#53675](https://github.com/dotnet/sdk/pull/53675),
+[#53648](https://github.com/dotnet/sdk/pull/53648),
+[#54023](https://github.com/dotnet/sdk/pull/54023)).
+
+Mobile got its **own transport** — a WebSocket hosted by dotnet-watch's Kestrel — precisely
+because the named-pipe path can't reach the simulator. iOS additionally requires
+`<MtouchLink>None</MtouchLink>` in the csproj
+([macios#25295](https://github.com/dotnet/macios/issues/25295)).
+
+.NET 11 is **still preview** as of July 2026 (Preview 6 shipped 2026-07-14); GA is targeted
+for **2026-11-10**.
+
+### Consequence for the "hot-reload bridge" idea
+
+Earlier in this research the missing reload trigger looked like a gap NOMAD.Maui could close
+with a thin shim. That conclusion no longer holds, in both directions:
+
+- **Today it is not buildable.** There is no CLI-hostable delta channel on .NET 10 — no env
+  var, no `dotnet build -t:Run` variant, no `dotnet-dsrouter` path, no third-party tool. A
+  clean negative.
+- **Tomorrow it is unnecessary.** .NET 11 ships the capability natively. The useful work is
+  not a bridge but **wiring DevFlow's driving alongside `dotnet watch`'s reloading** once
+  .NET 11 is GA, and re-running the edit→verify measurement then.
+
+Until then MAUI's edit→verify floor stays at rebuild+deploy (~9s), against Flutter's ~0.22s.
+
+---
+
 ## Benchmark design
 
 ### The apps

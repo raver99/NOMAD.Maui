@@ -11,7 +11,7 @@
       "name": "nomad-maui-skills",
       "source": "./plugins/nomad-maui-skills",
       "description": "Cross-project .NET MAUI skills: /nomad-maui-doctor for environment and project health checks, and /maui-devflow for DevFlow in-process UI automation setup and usage.",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "author": {
         "name": "rolandhuhn"
       },
