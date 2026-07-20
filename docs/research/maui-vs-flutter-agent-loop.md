@@ -482,13 +482,15 @@ AFTER  (via DevFlow):  "HOTRELOAD_MARKER credentials rejected."
 |---|---|---|
 | `dotnet watch` enters watch state | ❌ never | ✅ "Waiting for changes" |
 | Detects a file edit | ❌ | ✅ ~2s |
-| **C# change applied** | ❌ | ✅ **245ms, effect verified** |
+| **C# change applied** | ❌ | ✅ **245ms first, ~100ms warm — effect verified** |
 | XAML change applied | ❌ | ⚠️ **reported applied, did NOT take effect** |
 | DevFlow agent runs on the TFM | ✅ | ✅ (contradicts "net10-only") |
 | DevFlow drives the watch-launched app | n/a | ✅ agent on port 9223 |
 
 **This collapses MAUI's one structural gap.** Edit→verify for a C# change goes from ~9s
-(rebuild + reinstall + relaunch) to **~0.25s** — the same order as Flutter's 0.22s.
+(rebuild + reinstall + relaunch) to **245ms on the first reload and ~100ms warm**
+(measured 101/110/98ms on successive edits) — at parity with, and warm slightly faster than,
+Flutter's 220ms.
 
 ### Caveats measured, not assumed
 
@@ -523,7 +525,8 @@ So the contribution is not a bridge. It is **documenting the working configurati
 `--device` passed directly, an Xcode-matched preview, no Controls/Essentials pins, and the
 knowledge that XAML changes still need a rebuild while C# changes do not.
 
-On .NET 10 the edit→verify floor stays at ~9s. On .NET 11 Preview 4 it is ~0.25s for C#.
+On .NET 10 the edit→verify floor stays at ~9s. On .NET 11 Preview 4 it is ~100ms warm for C#,
+and still a rebuild for XAML.
 
 ---
 
