@@ -18,14 +18,14 @@ Skills for AI-assisted .NET MAUI development. Install in any project:
 ```
 
 - **`/nomad-maui-doctor`** — profile-driven health check for your environment and project conventions (first run stores a profile in `.nomad/doctor.json`). [Skill](plugins/nomad-maui-skills/skills/nomad-maui-doctor/SKILL.md)
-- **`/maui-devflow`** — runbook for DevFlow in-process UI automation: install, register the agent, build/run, and drive a live app. [Skill](plugins/nomad-maui-skills/skills/maui-devflow/SKILL.md)
+- **`/maui-devflow`** — runbook for DevFlow in-process UI automation: install, register the agent, build/run, and drive a live app. Also covers keeping the agent **loop fast** — batching, scoped queries, wait-on-data, and **C# hot reload via `dotnet watch` on .NET 11** (~100ms, DevFlow driving). [Skill](plugins/nomad-maui-skills/skills/maui-devflow/SKILL.md)
 
 ## Knowledge base — [`docs/`](docs/README.md)
 
 - **[Conventions](docs/maui-conventions.md)** — MVVM, DI, mandatory `AutomationId`, DevFlow agent, screen boilerplate, app identity.
 - **Tool guides** — [DevFlow](docs/maui-devflow.md) · [MAUI Sherpa](docs/maui-sherpa.md) · [MAUI Skills](docs/maui-skills.md) · [Syncfusion Skills](docs/syncfusion-maui-skills.md) · [UI Components](docs/ui-components.md)
 - **[Exploration Radar](docs/radar.md)** — candidates noted for future exploration (libraries, tools, themes). **Not recommendations.**
-- **Research** — [Appium vs MAUI DevFlow benchmark](docs/research/appium-vs-maui-devflow.md)
+- **Research** — [Appium vs MAUI DevFlow benchmark](docs/research/appium-vs-maui-devflow.md) · [MAUI+DevFlow vs Flutter+Marionette: the agent feedback loop](docs/research/maui-vs-flutter-agent-loop.md) (where the loop costs time; C# hot reload on .NET 11)
 
 ## Sample app — [`src/NOMAD.Maui/`](src/NOMAD.Maui/)
 

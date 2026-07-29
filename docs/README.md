@@ -38,6 +38,8 @@ Best practices, tools, and research for .NET MAUI development.
 - [MAUI DevFlow — How to Use & Best Practices](maui-devflow.md)  
   Setup, CLI commands, MCP server config, CSS selector reference, AutomationId guidance, and best practices drawn from official docs and hands-on benchmarking.
 
-- [Appium vs MAUI DevFlow — Comparative Benchmark](research/appium-vs-maui-devflow.md)
-- [MAUI + DevFlow vs Flutter + Marionette — the AI agent feedback loop](research/maui-vs-flutter-agent-loop.md) — where the loop actually costs time; hot-reload gap  
+- [Appium vs MAUI DevFlow — Comparative Benchmark](research/appium-vs-maui-devflow.md)  
   Scripted timing benchmark + AI agent sessions comparing Appium (XCUITest) against Microsoft's experimental DevFlow stack. DevFlow is 4.6× faster on action latency, 7.2× faster end-to-end for an AI agent task.
+
+- [MAUI + DevFlow vs Flutter + Marionette — the AI agent feedback loop](research/maui-vs-flutter-agent-loop.md)  
+  Where the agent loop actually costs time. Key findings: MAUI's loop is not structurally slow (the observed slowness was wrong CLI docs); usage dominates framework (optimized vs naive is a bigger gap than MAUI vs Flutter); and MAUI's one real gap — no CLI hot reload on .NET 10 — **closes on .NET 11 Preview 4**, where `dotnet watch` applies C# changes in ~100ms while DevFlow drives the same running app.
