@@ -208,6 +208,20 @@ screenshot-driven path, it costs the same whether the agent has seen the app bef
 See [MAUI vs Flutter agent loop](research/maui-vs-flutter-agent-loop.md) for where these
 costs actually land.
 
+### Skip the rebuild with hot reload (.NET 11 only)
+
+The biggest cost in the edit→verify loop is the rebuild+reinstall (~9s). On **.NET 11
+Preview 4+** you can skip it: `dotnet watch` applies a **C# change to the running iOS
+Simulator app in ~100ms**, and the DevFlow agent keeps working inside that app — so you edit,
+watch reloads, and you drive/assert without relaunching.
+
+**This does not work on .NET 10** — there `dotnet watch` prints "Hot reload enabled" but never
+watches; budget the rebuild. XAML changes never hot reload on either.
+
+The operational steps (the four setup requirements, why to poll the watch log instead of
+`sleep`, and the `grep -a` trap) are in the [`/maui-devflow` skill](../plugins/nomad-maui-skills/skills/maui-devflow/SKILL.md#hot-reload); the measured latencies are in the
+[agent-loop research](research/maui-vs-flutter-agent-loop.md).
+
 ---
 
 ## CSS selector reference
